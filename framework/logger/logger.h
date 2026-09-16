@@ -1,30 +1,39 @@
 #ifndef LOGGER_H
 #define LOGGER_H
+
 #include <string>
+#include <mutex>
 
 enum class LoggerError
 {
     SUCCESS,
     ALREADY_INITIALIZED,
-    FILE_OPEN_FAILED,
-    NOT_INITIALIZED,
-    WRITE_FAILED
+    NOT_INITIALIZED
+};
+
+enum class LogLevel
+{
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR
 };
 
 class Logger
 {
     Logger();
 
-    int file_descriptor = -1;
-    bool initialized = false;
-    
-public:
+    bool initialized;
+    std::mutex log_mutex;
 
+    LoggerError Log(LogLevel level, const std::string& message);
+
+public:
     ~Logger();
 
     static Logger& GetInstance();
 
-    LoggerError Initialize(const std::string& log_file);
+    LoggerError Initialize();
 
     LoggerError Debug(const std::string& message);
     LoggerError Info(const std::string& message);
