@@ -14,6 +14,9 @@ const char* error_to_string(LoggerError error)
 
         case LoggerError::NOT_INITIALIZED:
             return "NOT_INITIALIZED";
+
+        case LoggerError::INVALID_ARGUMENT:
+            return "INVALID_ARGUMENT";
     }
 
     return "UNKNOWN";
