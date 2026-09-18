@@ -1,4 +1,5 @@
 #include "framework/thread/thread_manager.h"
+#include "framework/util/helgrind_annotations.h"
 
 #include <atomic>
 #include <chrono>
@@ -9,8 +10,16 @@
 namespace
 {
 
-constexpr int STRESS_ITERATIONS = 1000;
-constexpr int CONCURRENT_THREADS = 8;
+#ifndef STRESS_ITERATIONS
+#define STRESS_ITERATIONS 1000
+#endif
+
+#ifndef CONCURRENT_THREADS
+#define CONCURRENT_THREADS 8
+#endif
+
+constexpr int kStressIterations  = STRESS_ITERATIONS;
+constexpr int kConcurrentThreads = CONCURRENT_THREADS;
 
 void PrintResult(const char* name, bool passed)
 {
@@ -32,6 +41,7 @@ bool TestRepeatedLifecycle()
         auto worker = [&worker_started](StopToken& token)
         {
             worker_started.store(true);
+            ANNOTATE_HAPPENS_BEFORE(&worker_started);
 
             while (!token.IsStopRequested())
             {
@@ -54,6 +64,8 @@ bool TestRepeatedLifecycle()
             std::this_thread::sleep_for(
                 std::chrono::microseconds(100));
         }
+
+        ANNOTATE_HAPPENS_AFTER(&worker_started);
 
         if (!worker_started.load())
         {
@@ -102,6 +114,7 @@ bool TestConcurrentStop()
         auto worker = [&worker_started](StopToken& token)
         {
             worker_started.store(true);
+            ANNOTATE_HAPPENS_BEFORE(&worker_started);
 
             while (!token.IsStopRequested())
             {
@@ -122,6 +135,8 @@ bool TestConcurrentStop()
                 std::chrono::microseconds(100));
         }
 
+        ANNOTATE_HAPPENS_AFTER(&worker_started);
+
         if (!worker_started.load())
         {
             manager.Stop();
@@ -133,6 +148,7 @@ bool TestConcurrentStop()
         std::vector<std::thread> threads;
 
         std::atomic<int> success_count(0);
+        ANNOTATE_ATOMIC_COUNTER(&success_count);
 
         for (int i = 0; i < CONCURRENT_THREADS; ++i)
         {
@@ -190,6 +206,7 @@ bool TestConcurrentIsRunning()
     auto worker = [&worker_started](StopToken& token)
     {
         worker_started.store(true);
+        ANNOTATE_HAPPENS_BEFORE(&worker_started);
 
         while (!token.IsStopRequested())
         {
@@ -210,6 +227,8 @@ bool TestConcurrentIsRunning()
             std::chrono::microseconds(100));
     }
 
+    ANNOTATE_HAPPENS_AFTER(&worker_started);
+
     if (!worker_started.load())
     {
         manager.Stop();
@@ -219,6 +238,7 @@ bool TestConcurrentIsRunning()
     }
 
     std::atomic<bool> test_failed(false);
+    ANNOTATE_ATOMIC_COUNTER(&test_failed);
 
     std::vector<std::thread> threads;
 
@@ -269,6 +289,7 @@ bool TestConcurrentStart()
         ThreadManager manager;
 
         std::atomic<int> start_success_count(0);
+        ANNOTATE_ATOMIC_COUNTER(&start_success_count);
 
         auto worker = [](StopToken& token)
         {
