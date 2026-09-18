@@ -3,62 +3,151 @@
 #include <csignal>
 #include <iostream>
 
+namespace
+{
+
+int tests_run    = 0;
+int tests_passed = 0;
+
+void Check(bool condition, const char* name)
+{
+    ++tests_run;
+    if (condition)
+    {
+        ++tests_passed;
+        std::cout << "[PASS] " << name << '\n';
+    }
+    else
+    {
+        std::cout << "[FAIL] " << name << '\n';
+    }
+}
+
+} // namespace
+
 int main()
 {
-    SignalHandler signalHandler;
+    std::cout << "=== SignalHandler Test ===\n\n";
 
-    // Test 1: Initialize
-    if (!signalHandler.Initialize())
+    // Test 1: initial state
     {
-        std::cerr << "TEST FAILED: SignalHandler initialization\n";
-        return 1;
+        SignalHandler handler;
+
+        Check(!handler.IsInstalled(),         "Not installed at construction");
+        Check(!handler.IsShutdownRequested(), "Shutdown not requested at start");
     }
 
-    std::cout << "TEST PASSED: SignalHandler initialization\n";
-
-    // Test 2: Initial shutdown state
-    if (signalHandler.IsShutdownRequested())
+    // Test 2: Initialize succeeds
     {
-        std::cerr << "TEST FAILED: Shutdown requested initially\n";
-        return 1;
+        SignalHandler handler;
+
+        Check(handler.Initialize(),           "Initialize succeeds");
+        Check(handler.IsInstalled(),          "IsInstalled true after Initialize");
+        Check(!handler.IsShutdownRequested(), "Flag clear after Initialize");
+
+        handler.Shutdown();
     }
 
-    std::cout << "TEST PASSED: Initial shutdown state\n";
-
-    // Test 3: SIGINT
-    raise(SIGINT);
-
-    if (!signalHandler.IsShutdownRequested())
+    // Test 3: double Initialize is rejected
     {
-        std::cerr << "TEST FAILED: SIGINT did not request shutdown\n";
-        return 1;
+        SignalHandler handler;
+        handler.Initialize();
+
+        Check(!handler.Initialize(),          "Double Initialize is rejected");
+
+        handler.Shutdown();
     }
 
-    std::cout << "TEST PASSED: SIGINT handling\n";
-
-    // Test 4: Shutdown resets state
-    signalHandler.Shutdown();
-
-    if (signalHandler.IsShutdownRequested())
+    // Test 4: SIGINT sets flag
     {
-        std::cerr << "TEST FAILED: Shutdown did not reset state\n";
-        return 1;
+        SignalHandler handler;
+        handler.Initialize();
+
+        raise(SIGINT);
+
+        Check(handler.IsShutdownRequested(),  "SIGINT sets shutdown flag");
+
+        handler.Shutdown();
     }
 
-    std::cout << "TEST PASSED: Shutdown reset\n";
-
-    // Test 5: SIGTERM
-    raise(SIGTERM);
-
-    if (!signalHandler.IsShutdownRequested())
+    // Test 5: SIGTERM sets flag
     {
-        std::cerr << "TEST FAILED: SIGTERM did not request shutdown\n";
-        return 1;
+        SignalHandler handler;
+        handler.Initialize();
+
+        raise(SIGTERM);
+
+        Check(handler.IsShutdownRequested(),  "SIGTERM sets shutdown flag");
+
+        handler.Shutdown();
     }
 
-    std::cout << "TEST PASSED: SIGTERM handling\n";
+    // Test 6: Shutdown resets state and flag
+    {
+        SignalHandler handler;
+        handler.Initialize();
 
-    std::cout << "ALL SIGNAL HANDLER TESTS PASSED\n";
+        raise(SIGINT);
 
-    return 0;
+        Check(handler.IsShutdownRequested(),  "Flag set before Shutdown");
+
+        handler.Shutdown();
+
+        Check(!handler.IsInstalled(),         "Not installed after Shutdown");
+        Check(!handler.IsShutdownRequested(), "Flag cleared after Shutdown");
+    }
+
+    // Test 7: Shutdown without Initialize is safe no-op
+    {
+        SignalHandler handler;
+
+        handler.Shutdown();
+
+        Check(!handler.IsInstalled(),         "Shutdown without Initialize is safe");
+    }
+
+    // Test 8: re-initialize after Shutdown works
+    {
+        SignalHandler handler;
+
+        handler.Initialize();
+        raise(SIGINT);
+        handler.Shutdown();
+
+        Check(handler.Initialize(),           "Re-Initialize after Shutdown succeeds");
+        Check(handler.IsInstalled(),          "Installed after re-Initialize");
+        Check(!handler.IsShutdownRequested(), "Flag clear after re-Initialize");
+
+        handler.Shutdown();
+    }
+
+    // Test 9: destructor cleans up without explicit Shutdown
+    {
+        {
+            SignalHandler handler;
+            handler.Initialize();
+            raise(SIGINT);
+            // Intentional: no explicit Shutdown.
+        }
+
+        SignalHandler handler;
+
+        Check(handler.Initialize(),           "Initialize succeeds after destructor cleanup");
+        Check(!handler.IsShutdownRequested(), "Flag clear after destructor cleanup");
+
+        handler.Shutdown();
+    }
+
+    std::cout << "\n=== Summary ===\n";
+    std::cout << "Tests run:    " << tests_run    << '\n';
+    std::cout << "Tests passed: " << tests_passed << '\n';
+
+    if (tests_run == tests_passed)
+    {
+        std::cout << "ALL SIGNAL HANDLER TESTS PASSED\n";
+        return 0;
+    }
+
+    std::cout << "SIGNAL HANDLER TESTS FAILED\n";
+    return 1;
 }
