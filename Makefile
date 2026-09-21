@@ -27,6 +27,7 @@ LOGGER_SRC := framework/logger/logger.cpp
 SIGNAL_SRC := framework/signal/signal_handler.cpp
 THREAD_SRC := framework/thread/thread_manager.cpp \
               framework/thread/stop_token.cpp
+TIMER_SRC  := framework/timer/timer_scheduler.cpp
 
 QUEUE_HEADERS := framework/queue/queue.h \
                  framework/queue/queue.tpp
@@ -58,6 +59,7 @@ TEST_THREAD_MANAGER_TIMEOUT := $(BUILD_DIR)/test_thread_manager_timeout
 TEST_QUEUE                  := $(BUILD_DIR)/test_queue
 TEST_QUEUE_TIMEOUT          := $(BUILD_DIR)/test_queue_timeout
 TEST_FIRMWARE_APP           := $(BUILD_DIR)/test_firmware_app
+TEST_TIMER_SCHEDULER        := $(BUILD_DIR)/test_timer_scheduler
 
 ALL_TESTS := \
     $(TEST_LOGGER) \
@@ -71,7 +73,8 @@ ALL_TESTS := \
     $(TEST_THREAD_MANAGER_TIMEOUT) \
     $(TEST_QUEUE) \
     $(TEST_QUEUE_TIMEOUT) \
-    $(TEST_FIRMWARE_APP)
+    $(TEST_FIRMWARE_APP) \
+    $(TEST_TIMER_SCHEDULER)
 
 # Tests to run under Valgrind (skipping the big stress test)
 VALGRIND_TARGETS := \
@@ -79,7 +82,8 @@ VALGRIND_TARGETS := \
     $(TEST_QUEUE_TIMEOUT) \
     $(TEST_THREAD_MANAGER_SMALL) \
     $(TEST_THREAD_MANAGER_TIMEOUT) \
-    $(TEST_FIRMWARE_APP)
+    $(TEST_FIRMWARE_APP) \
+    $(TEST_TIMER_SCHEDULER)
 
 # ---------------------------------------------------------------------------
 # Top-level targets
@@ -167,6 +171,14 @@ $(TEST_FIRMWARE_APP): tests/firmware_app/test_firmware_app.cpp \
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # ---------------------------------------------------------------------------
+# TimerScheduler tests
+# ---------------------------------------------------------------------------
+
+$(TEST_TIMER_SCHEDULER): tests/timer/test_timer_scheduler.cpp \
+                         $(TIMER_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+# ---------------------------------------------------------------------------
 # run-tests
 # ---------------------------------------------------------------------------
 #
@@ -215,6 +227,7 @@ valgrind: tests
 	    hg_log=/tmp/$$name.hg.log; \
 	    printf "  [Memcheck] %s ... " "$$name"; \
 	    if valgrind --leak-check=full --error-exitcode=1 \
+	        --suppressions=framework/util/valgrind.supp \
 	        ./$$t > $$mem_log 2>&1; then \
 	        echo "PASS"; \
 	    else \
@@ -224,6 +237,7 @@ valgrind: tests
 	    fi; \
 	    printf "  [Helgrind] %s ... " "$$name"; \
 	    if valgrind --tool=helgrind --error-exitcode=1 \
+	        --suppressions=framework/util/valgrind.supp \
 	        ./$$t > $$hg_log 2>&1; then \
 	        echo "PASS"; \
 	    else \
@@ -260,5 +274,6 @@ help:
 	@echo "  make tests       Build only the test binaries"
 	@echo "  make run-tests   Run the full test suite"
 	@echo "  make valgrind    Run Memcheck + Helgrind on key tests"
+	@echo "                   (with framework/util/valgrind.supp applied)"
 	@echo "  make clean       Remove build artifacts"
 	@echo "  make help        Show this message"

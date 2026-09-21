@@ -1,0 +1,62 @@
+# ============================================================================
+# Valgrind suppressions for known false positives.
+# ============================================================================
+#
+# These suppressions do NOT hide bugs in this project's code.
+# They silence issues in library / platform code that Helgrind cannot
+# correctly model.
+#
+# Each suppression documents:
+#   - what triggers it
+#   - why it is not a real bug
+#   - a reference for further reading
+#
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# glibc condition variable wake-chain internal signal (Misc variant)
+# ----------------------------------------------------------------------------
+#
+# Since glibc 2.25, pthread_cond_signal uses a "wake chain" optimization:
+# the woken waiter may signal the next waiter in the same group while
+# re-acquiring the user's mutex, before that mutex is held by any thread.
+# Helgrind sees this internal signal as a pthread_cond contract violation.
+#
+# Our queue holds the mutex for every user-visible signal/broadcast
+# (verified by inspection of queue.tpp). The report originates entirely
+# inside glibc's __pthread_cond_wait_common.
+#
+# The trailing '...' matches any stack frames below the glibc boundary.
+# This anchors the suppression to glibc's internal behavior, not to any
+# specific call site in our code.
+#
+# Reference:
+#   https://sourceware.org/glibc/wiki/CondVar
+{
+   glibc_condvar_internal_signal_misc
+   Helgrind:Misc
+   obj:/usr/libexec/valgrind/vgpreload_helgrind-amd64-linux.so
+   fun:__pthread_cond_wait_common
+   ...
+}
+
+
+# ----------------------------------------------------------------------------
+# glibc condition variable wake-chain internal signal (Dubious variant)
+# ----------------------------------------------------------------------------
+#
+# Same underlying glibc behavior as above, reported under a stricter
+# Helgrind category ('Dubious' = "associated lock is not held by any
+# thread"). Helgrind uses this category when it can prove the signal is
+# emitted from within the pthread_cond_wait resume path.
+#
+# Reference:
+#   https://sourceware.org/glibc/wiki/CondVar
+{
+   glibc_condvar_internal_signal_dubious
+   Helgrind:Dubious
+   obj:/usr/libexec/valgrind/vgpreload_helgrind-amd64-linux.so
+   fun:__pthread_cond_wait_common
+   ...
+}
