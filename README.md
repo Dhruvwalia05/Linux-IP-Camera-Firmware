@@ -234,10 +234,10 @@ For every major component, the project should be able to answer:
 
 | Component      | Status | Purpose                                   |
 | -------------- | -----: | ----------------------------------------- |
-| TimerScheduler |      ⬜ | Shared timer/scheduler infrastructure     |
-| Event          |      ⬜ | In-process publish/subscribe event system |
-| IPC            |      ⬜ | Inter-process communication               |
-| Watchdog       |      ⬜ | Linux kernel watchdog integration         |
+| TimerScheduler |✅ Done | Shared timer/scheduler infrastructure     |
+| Event          |      ⬜| In-process publish/subscribe event system |
+| IPC            |      ⬜| Inter-process communication               |
+| Watchdog       |      ⬜| Linux kernel watchdog integration         |
 
 ---
 
@@ -579,6 +579,7 @@ This keeps failures:
 | Queue         | `test_queue`                  | 81 checks: FIFO, capacity, shutdown            |
 | Queue         | `test_queue_timeout`          | 33 checks: `PushFor` / `PopFor`                |
 | FirmwareApp   | `test_firmware_app`           | State machine, idempotency, RAII, threads      |
+| TimerScheduler | `test_timer_scheduler`           | 40 checks: lifecycle, periodic, cancel, throws |
 
 ---
 
