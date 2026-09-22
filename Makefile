@@ -32,6 +32,8 @@ TIMER_SRC  := framework/timer/timer_scheduler.cpp
 QUEUE_HEADERS := framework/queue/queue.h \
                  framework/queue/queue.tpp
 
+EVENT_HEADERS := framework/event/event_bus.h
+
 # ---------------------------------------------------------------------------
 # Production binary
 # ---------------------------------------------------------------------------
@@ -60,6 +62,7 @@ TEST_QUEUE                  := $(BUILD_DIR)/test_queue
 TEST_QUEUE_TIMEOUT          := $(BUILD_DIR)/test_queue_timeout
 TEST_FIRMWARE_APP           := $(BUILD_DIR)/test_firmware_app
 TEST_TIMER_SCHEDULER        := $(BUILD_DIR)/test_timer_scheduler
+TEST_EVENT_BUS              := $(BUILD_DIR)/test_event_bus
 
 ALL_TESTS := \
     $(TEST_LOGGER) \
@@ -74,7 +77,8 @@ ALL_TESTS := \
     $(TEST_QUEUE) \
     $(TEST_QUEUE_TIMEOUT) \
     $(TEST_FIRMWARE_APP) \
-    $(TEST_TIMER_SCHEDULER)
+    $(TEST_TIMER_SCHEDULER) \
+    $(TEST_EVENT_BUS)
 
 # Tests to run under Valgrind (skipping the big stress test)
 VALGRIND_TARGETS := \
@@ -83,7 +87,8 @@ VALGRIND_TARGETS := \
     $(TEST_THREAD_MANAGER_SMALL) \
     $(TEST_THREAD_MANAGER_TIMEOUT) \
     $(TEST_FIRMWARE_APP) \
-    $(TEST_TIMER_SCHEDULER)
+    $(TEST_TIMER_SCHEDULER) \
+    $(TEST_EVENT_BUS)
 
 # ---------------------------------------------------------------------------
 # Top-level targets
@@ -177,6 +182,14 @@ $(TEST_FIRMWARE_APP): tests/firmware_app/test_firmware_app.cpp \
 $(TEST_TIMER_SCHEDULER): tests/timer/test_timer_scheduler.cpp \
                          $(TIMER_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+# ---------------------------------------------------------------------------
+# EventBus tests (header-only — only the header is a dependency)
+# ---------------------------------------------------------------------------
+
+$(TEST_EVENT_BUS): tests/event/test_event_bus.cpp \
+                   $(EVENT_HEADERS) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
 
 # ---------------------------------------------------------------------------
 # run-tests
