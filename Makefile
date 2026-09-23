@@ -28,6 +28,9 @@ SIGNAL_SRC := framework/signal/signal_handler.cpp
 THREAD_SRC := framework/thread/thread_manager.cpp \
               framework/thread/stop_token.cpp
 TIMER_SRC  := framework/timer/timer_scheduler.cpp
+IPC_SRC    := framework/ipc/ipc_socket.cpp \
+              framework/ipc/ipc_server.cpp \
+              framework/ipc/ipc_client.cpp
 
 QUEUE_HEADERS := framework/queue/queue.h \
                  framework/queue/queue.tpp
@@ -63,6 +66,7 @@ TEST_QUEUE_TIMEOUT          := $(BUILD_DIR)/test_queue_timeout
 TEST_FIRMWARE_APP           := $(BUILD_DIR)/test_firmware_app
 TEST_TIMER_SCHEDULER        := $(BUILD_DIR)/test_timer_scheduler
 TEST_EVENT_BUS              := $(BUILD_DIR)/test_event_bus
+TEST_IPC                    := $(BUILD_DIR)/test_ipc
 
 ALL_TESTS := \
     $(TEST_LOGGER) \
@@ -78,7 +82,8 @@ ALL_TESTS := \
     $(TEST_QUEUE_TIMEOUT) \
     $(TEST_FIRMWARE_APP) \
     $(TEST_TIMER_SCHEDULER) \
-    $(TEST_EVENT_BUS)
+    $(TEST_EVENT_BUS) \
+    $(TEST_IPC)
 
 # Tests to run under Valgrind (skipping the big stress test)
 VALGRIND_TARGETS := \
@@ -88,7 +93,8 @@ VALGRIND_TARGETS := \
     $(TEST_THREAD_MANAGER_TIMEOUT) \
     $(TEST_FIRMWARE_APP) \
     $(TEST_TIMER_SCHEDULER) \
-    $(TEST_EVENT_BUS)
+    $(TEST_EVENT_BUS) \
+    $(TEST_IPC)
 
 # ---------------------------------------------------------------------------
 # Top-level targets
@@ -190,6 +196,13 @@ $(TEST_TIMER_SCHEDULER): tests/timer/test_timer_scheduler.cpp \
 $(TEST_EVENT_BUS): tests/event/test_event_bus.cpp \
                    $(EVENT_HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
+
+# ---------------------------------------------------------------------------
+# IPC tests
+# ---------------------------------------------------------------------------
+
+$(TEST_IPC): tests/ipc/test_ipc.cpp $(IPC_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # ---------------------------------------------------------------------------
 # run-tests
