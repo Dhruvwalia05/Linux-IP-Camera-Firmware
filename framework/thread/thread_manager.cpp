@@ -159,3 +159,19 @@ bool ThreadManager::IsRunning() const
     std::lock_guard<std::mutex> lock(mutex);
     return running;
 }
+
+bool ThreadManager::IsCurrentThread() const noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    return running && worker_thread.get_id() == std::this_thread::get_id();
+}
+
+void ThreadManager::Detach() noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (worker_thread.joinable())
+    {
+        worker_thread.detach();
+        running = false;
+    }
+}

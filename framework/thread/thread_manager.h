@@ -43,6 +43,17 @@ public:
 
     bool IsRunning() const;
 
+    // True if the calling thread is the worker thread.
+    // Useful for objects that own a ThreadManager and might be destroyed
+    // from within their own worker.
+    bool IsCurrentThread() const noexcept;
+
+    // Detach the worker thread. Marks the manager as stopped without
+    // waiting for the thread to exit. Used only when Join() would be
+    // joining self — the thread is about to exit on its own and its
+    // lifetime no longer needs to be synchronized.
+    void Detach() noexcept;
+
 private:
     ThreadError CompleteJoin(std::unique_lock<std::mutex>& lock);
 
