@@ -5,9 +5,9 @@ A production-oriented Linux IP camera firmware architecture written
 from scratch in C++17 — structured the way real embedded Linux
 products are structured, not as a collection of demos.
 
-**Status:** Phase 1 complete · Phase 2 complete · Phase 3 next
+**Status:** Phase 1 complete · Phase 2 complete · Phase 3 in progress
 **Language:** C++17 · **Build:** Make · **Analysis:** Valgrind (Memcheck + Helgrind)
-**Tests:** 16 binaries · 349 checks · 100% pass · Memcheck & Helgrind clean
+**Tests:** 18 binaries · 470+ checks · 100% pass · Memcheck & Helgrind clean
 
 ---
 
@@ -27,21 +27,21 @@ added after "it works."
 **Not a tutorial.** The code does not skip correctness for brevity.
 **Not bare-metal.** It targets Linux; it uses pthreads, sockets,
 signals, V4L2, and device interfaces.
-**Not finished.** Phases 1 and 2 of 6 are complete; the roadmap
-reflects a multi-month effort.
+**Not finished.** Phases 1 and 2 are complete and Phase 3 is underway;
+the roadmap reflects a multi-month effort.
 
 ---
 
 ## Current Status
 
-| Phase | Scope          | Status         |
-| ----- | -------------- | -------------- |
-| 1     | Foundation     | ✅ Complete    |
-| 2     | Core Runtime   | ✅ Complete    |
-| 3     | Services       | ⏳ Next        |
-| 4     | Security       | ⏳ Planned     |
-| 5     | OTA            | ⏳ Planned     |
-| 6     | Integration    | ⏳ Planned     |
+| Phase | Scope          | Status              |
+| ----- | -------------- | ------------------- |
+| 1     | Foundation     | ✅ Complete         |
+| 2     | Core Runtime   | ✅ Complete         |
+| 3     | Services       | 🔄 In progress      |
+| 4     | Security       | ⏳ Planned          |
+| 5     | OTA            | ⏳ Planned          |
+| 6     | Integration    | ⏳ Planned          |
 
 ### Phase 1 — Foundation (complete)
 
@@ -62,6 +62,17 @@ reflects a multi-month effort.
 | IPC             | Unix domain socket message-passing               |
 | Watchdog        | Health-aware `/dev/watchdog` integration         |
 
+### Phase 3 — Services (in progress)
+
+| Component       | Status | Purpose                                          |
+| --------------- | :----: | ------------------------------------------------ |
+| Config          |   ✅   | INI parser with typed accessors                  |
+| Network         |   ✅   | TCP server, client, connection                   |
+| MQTT            |   ⏳   | Client, topics, QoS, TLS, persistence            |
+| Camera          |   ⏳   | V4L2 capture, format negotiation, recovery       |
+| Motion          |   ⏳   | Frame-difference detection on decimated stream   |
+| RTSP            |   ⏳   | RFC 2326 server with RTP streaming               |
+
 ---
 
 ## Architecture
@@ -73,7 +84,7 @@ about higher ones.
         Application        main.cpp · FirmwareApp
              │
              ▼
-         Services          Camera · Network · MQTT · RTSP · OTA · ...
+         Services          Config · Network · MQTT · Camera · Motion · RTSP
              │
              ▼
          Framework         Logger · ThreadManager · Queue
@@ -123,8 +134,10 @@ The production binary is written to `build/firmware`.
 ```
 
 Current behavior: initializes Logger and SignalHandler, enters the
-run loop, and exits cleanly on **Ctrl+C** or **SIGTERM**. As Phase 3
-services land, the startup sequence will become progressively richer.
+run loop, and exits cleanly on **Ctrl+C** or **SIGTERM**. Services
+are not yet wired into the application lifecycle — that is Phase 6
+integration work. As Phase 3 progresses and Phase 6 begins, the
+startup sequence will become progressively richer.
 
 ---
 
@@ -144,12 +157,14 @@ make test-timer
 make test-event
 make test-ipc
 make test-watchdog
+make test-config
+make test-network
 make test-firmware-app
 ```
 
 Each target builds only what it needs, including dependencies. For
-example, `make test-watchdog` compiles `test_watchdog.cpp` plus
-`watchdog.cpp`, `thread_manager.cpp`, `stop_token.cpp`, and
+example, `make test-network` compiles `test_network.cpp` plus
+`network.cpp`, `thread_manager.cpp`, `stop_token.cpp`, and
 `logger.cpp`, then runs the full test → Memcheck → Helgrind cycle.
 Nothing else in the project is touched.
 
@@ -168,7 +183,7 @@ Fails fast on the first broken component and prints the diagnosis.
 | `test_logger`                       | Lifecycle, level dispatch, output                 |
 | `test_logger_shutdown`              | Shutdown sequencing, re-init, concurrency         |
 | `test_logger_thread`                | 4 threads × 100 messages                          |
-| `test_logger_config`                | Configuration, filtering, output routing          |
+| `test_logger_config`                | Logger configuration, filtering, output routing   |
 | `test_signal_handler`               | SIGINT/SIGTERM, handler restore, RAII             |
 | `test_thread_manager`               | 25 lifecycle and concurrency checks               |
 | `test_thread_manager_stress`        | 1000-iteration stress (custom-only, no Valgrind)  |
@@ -181,6 +196,8 @@ Fails fast on the first broken component and prints the diagnosis.
 | `test_event_bus`                    | 38 checks: delivery, ordering, RAII, concurrency  |
 | `test_ipc`                          | 63 checks: framing, timeouts, stale-socket recovery |
 | `test_watchdog`                     | 43 checks: device, health aggregation, lifecycle  |
+| `test_config`                       | 79 checks: parsing, sections, types, require/get  |
+| `test_network`                      | 43 checks: server/client lifecycle, round trips, disconnect events |
 
 ### Valgrind
 
@@ -230,7 +247,8 @@ Lifecycle for a single worker thread. `Start` / `Stop` / `Join` /
 cooperatively. Named threads via `pthread_setname_np`. Destructor
 emits a diagnostic and calls `std::terminate()` if a worker is still
 running — ownership must be explicit, not hidden by a blocking
-destructor.
+destructor. Additional `IsCurrentThread()` and `Detach()` methods
+support objects that may be destroyed from within their own worker.
 
 ### Queue — `framework/queue/`
 
@@ -294,18 +312,55 @@ and let the hardware timer fire. Device access is abstracted behind
 jitter. Clean shutdown writes the magic `'V'` handshake before close,
 so the kernel does not fire the watchdog after the process exits.
 
+### Config — `services/config/`
+
+INI-style configuration service. Hand-rolled parser, zero external
+dependencies. `[section]` headers flatten into dotted keys —
+`[network]` + `port` → `network.port`. `#` and `;` full-line comments;
+no inline comments (values are literal bytes, trimmed). Two read APIs
+with distinct intents: `GetX(key, default)` for optional keys — returns
+the default on missing (DEBUG log) or invalid (WARN log with line
+number); `RequireX(key, out)` for mandatory keys — returns false on
+missing or invalid with an ERROR log, out-parameter untouched. Types:
+`string`, `int`, `bool`, `std::chrono::milliseconds`. `Load()` is
+single-shot and single-threaded; reads after `Load()` are thread-safe
+because the internal map is read-only from that point.
+
+### Network — `services/network/`
+
+TCP transport layer for single-machine or LAN communication. Three
+classes: `NetworkServer` (bind, listen, accept thread), `NetworkClient`
+(one-shot connect factory), `NetworkConnection` (shared handle owning
+the fd, a bounded send queue, and a dedicated sender thread).
+
+Thread-per-connection model. Reader work happens on the caller's
+thread via `Recv()`. Sends are queue-based — callers push chunks into
+a bounded `Queue<vector<uint8_t>>`; a sender thread drains it. When
+the queue is full, `Send` returns `QUEUE_FULL` — no hidden drop or
+block policy; the caller decides.
+
+No framing: the transport moves bytes, protocols own message
+boundaries. `NetworkConnected` and `NetworkDisconnected` events fire
+only from server-side connections — the client is a factory and its
+caller owns the connection directly. Handles partial writes,
+`EAGAIN`/`EINTR` retries, `MSG_NOSIGNAL` on every send (peer close
+becomes `PEER_CLOSED`, not `SIGPIPE`), and non-blocking connect with
+`SO_ERROR` verification. Client host must be a dotted-quad IPv4
+address; no DNS resolution.
+
 ---
 
 ## Roadmap
 
-### Phase 3 — Services *(next)*
+### Phase 3 — Services *(in progress)*
 
-- **Config** — configuration loading and validation
-- **Network** — TCP, TLS, reconnection with exponential backoff
-- **MQTT** — client, topics, QoS, TLS, persistence
-- **Camera** — V4L2 capture, format negotiation, error recovery
-- **Motion** — frame-difference detection on a decimated stream
-- **RTSP** — RFC 2326 server with RTP streaming
+- ✅ **Config** — INI parser with typed accessors and validation
+- ✅ **Network** — TCP transport with queue-based sends and
+  event-driven lifecycle notifications
+- ⏳ **MQTT** — client, topic management, QoS, TLS, persistence
+- ⏳ **Camera** — V4L2 capture, format negotiation, error recovery
+- ⏳ **Motion** — frame-difference detection on a decimated stream
+- ⏳ **RTSP** — RFC 2326 server with RTP streaming
 
 ### Phase 4 — Security
 
@@ -350,6 +405,14 @@ final architecture documentation
 7. **No hidden blocking in destructors.** `std::terminate()` is
    preferred over silently joining a thread whose stop request was
    ignored.
+8. **Right primitive for the lifetime.** A `ThreadManager`-managed
+   worker suits threads whose lifecycle is decoupled from their owner.
+   A raw `std::thread` with an atomic flag suits threads whose
+   lifetime is bound to the object they run on. Choose the primitive
+   that matches the coupling.
+9. **Transport moves bytes; protocols frame them.** Length prefixes,
+   delimiters, or connection-per-message belong to the layer above
+   the transport, not inside it.
 
 ---
 
@@ -384,7 +447,9 @@ Linux-IP-Camera-Firmware/
 │   ├── ipc/
 │   ├── watchdog/
 │   └── util/           Helgrind annotations, Valgrind suppressions
-├── services/           Domain services (empty — Phase 3)
+├── services/           Domain services
+│   ├── config/
+│   └── network/
 ├── platform/linux/     Platform-specific code (empty)
 ├── configs/            Runtime configuration (empty)
 ├── scripts/            Utility scripts (empty)
