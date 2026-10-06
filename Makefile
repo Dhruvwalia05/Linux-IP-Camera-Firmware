@@ -20,6 +20,7 @@
 #   make test-ipc           IPC
 #   make test-watchdog      Watchdog
 #   make test-config        Config
+#   make test-network       Network
 #   make test-firmware-app  FirmwareApp
 #   make test-latest        Whatever ALIAS_LAST refers to below
 #
@@ -38,7 +39,7 @@ SUPPRESSIONS   := framework/util/valgrind.supp
 
 # Change this alias to the component you're currently working on.
 # Then `make test-latest` runs the full verify cycle on just that component.
-ALIAS_LAST := test-config
+ALIAS_LAST := test-network
 
 # ---------------------------------------------------------------------------
 # Source groups (reused across targets)
@@ -56,6 +57,7 @@ WATCHDOG_SRC := framework/watchdog/watchdog.cpp
 
 # --- Services ---
 CONFIG_SRC   := services/config/config.cpp
+NETWORK_SRC  := services/network/network.cpp
 
 QUEUE_HEADERS := framework/queue/queue.h \
                  framework/queue/queue.tpp
@@ -93,6 +95,7 @@ TEST_EVENT_BUS              := $(BUILD_DIR)/test_event_bus
 TEST_IPC                    := $(BUILD_DIR)/test_ipc
 TEST_WATCHDOG               := $(BUILD_DIR)/test_watchdog
 TEST_CONFIG                 := $(BUILD_DIR)/test_config
+TEST_NETWORK                := $(BUILD_DIR)/test_network
 
 # Every test binary — used for `make tests` (build-all) only.
 ALL_TESTS := \
@@ -112,7 +115,8 @@ ALL_TESTS := \
     $(TEST_EVENT_BUS) \
     $(TEST_IPC) \
     $(TEST_WATCHDOG) \
-    $(TEST_CONFIG)
+    $(TEST_CONFIG) \
+    $(TEST_NETWORK)
 
 # ---------------------------------------------------------------------------
 # Top-level targets
@@ -121,7 +125,7 @@ ALL_TESTS := \
 .PHONY: all firmware tests run-tests clean help test-latest \
         test-logger test-signal test-thread test-queue \
         test-timer test-event test-ipc test-watchdog test-config \
-        test-firmware-app
+        test-network test-firmware-app
 
 all: firmware tests
 
@@ -216,6 +220,13 @@ $(TEST_WATCHDOG): tests/watchdog/test_watchdog.cpp \
 $(TEST_CONFIG): tests/config/test_config.cpp \
                 $(CONFIG_SRC) \
                 $(LOGGER_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+# --- Network (links Logger + ThreadManager; Queue and EventBus are header-only) ---
+$(TEST_NETWORK): tests/network/test_network.cpp \
+                 $(NETWORK_SRC) \
+                 $(THREAD_SRC) \
+                 $(LOGGER_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # ===========================================================================
@@ -337,6 +348,11 @@ test-config: $(TEST_CONFIG)
 	@echo "=== Config ==="
 	$(call FULL_VERIFY_ONE,$(TEST_CONFIG))
 
+test-network: $(TEST_NETWORK)
+	@echo ""
+	@echo "=== Network ==="
+	$(call FULL_VERIFY_ONE,$(TEST_NETWORK))
+
 test-firmware-app: $(TEST_FIRMWARE_APP)
 	@echo ""
 	@echo "=== FirmwareApp ==="
@@ -363,6 +379,7 @@ run-tests: test-logger \
            test-ipc \
            test-watchdog \
            test-config \
+           test-network \
            test-firmware-app
 	@echo ""
 	@echo "========================================="
@@ -402,6 +419,7 @@ help:
 	@echo "    make test-ipc"
 	@echo "    make test-watchdog"
 	@echo "    make test-config"
+	@echo "    make test-network"
 	@echo "    make test-firmware-app"
 	@echo "    make test-latest     (currently: $(ALIAS_LAST))"
 	@echo ""
